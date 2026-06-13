@@ -1,9 +1,11 @@
 import React, { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { X, ShoppingCart, Trash2, Plus, Minus, ShoppingBag, ArrowRight, Truck, PartyPopper, Check } from 'lucide-react'
 import { useCart } from '../../context/CartContext'
-import { cartAPI } from '../../services/api'
+import { ordersAPI } from '../../services/api'
 
 export default function CartSidebar() {
+  const navigate = useNavigate()
   const { cart, isOpen, setIsOpen, removeFromCart, updateQuantity, clearCart, fetchCart } = useCart()
   const [checkingOut, setCheckingOut] = useState(false)
   const [orderPlaced, setOrderPlaced] = useState(false)
@@ -18,13 +20,12 @@ export default function CartSidebar() {
   const handleCheckout = async () => {
     setCheckingOut(true)
     try {
-      await cartAPI.checkout()
-      setOrderPlaced(true)
+      // Create a pending order from the cart and head to the payment portal
+      const productIds = cart.items.map((it) => it.product_id)
+      const res = await ordersAPI.create({ product_ids: productIds })
       await fetchCart()
-      setTimeout(() => {
-        setOrderPlaced(false)
-        setIsOpen(false)
-      }, 3000)
+      setIsOpen(false)
+      navigate(`/payment/${res.data.id}`)
     } catch (err) {
       console.error('Checkout failed:', err)
       alert(err.response?.data?.detail || 'Checkout failed. Please try again.')
@@ -195,7 +196,7 @@ export default function CartSidebar() {
               disabled={checkingOut}
               className="w-full py-4 bg-green-gradient text-white font-bold rounded-2xl flex items-center justify-center gap-2 hover:opacity-90 btn-press shadow-green text-sm disabled:opacity-50"
             >
-              {checkingOut ? 'Placing Order...' : 'Place Order'} <ArrowRight size={17} />
+              {checkingOut ? 'Processing...' : 'Proceed to Payment'} <ArrowRight size={17} />
             </button>
             <button
               onClick={clearCart}

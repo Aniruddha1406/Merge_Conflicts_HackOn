@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Send, Zap, Trash2, ArrowRight, Settings, Sliders, ShieldCheck, Heart, Sparkles, Scale } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Send, Zap, Trash2, ArrowRight, Settings, Sliders, ShieldCheck, Heart, Sparkles, Scale, Mic, Volume2, VolumeX } from 'lucide-react'
 import Header from '../components/Layout/Header'
 import CartSidebar from '../components/Cart/CartSidebar'
 import MessageBubble from '../components/Chat/MessageBubble'
 import { chatAPI, profileAPI } from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import useSpeech from '../hooks/useSpeech'
 
 export default function ChatPage() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
@@ -18,6 +21,28 @@ export default function ChatPage() {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const messagesEndRef = useRef(null)
+
+  // Agent / checkout state
+  const [checkout, setCheckout] = useState(null)            // { stage, selected_ids } | null
+  const [lastRecommendedIds, setLastRecommendedIds] = useState([])
+  const [quickReplies, setQuickReplies] = useState([])
+
+  // Voice (Alexa-style) state
+  const [voiceEnabled, setVoiceEnabled] = useState(true)
+  const handleVoiceResult = (text) => {
+    if (text) handleSend(null, text)
+  }
+  const {
+    sttSupported,
+    ttsSupported,
+    listening,
+    speaking,
+    interim,
+    startListening,
+    stopListening,
+    speak,
+    stopSpeaking,
+  } = useSpeech({ onResult: handleVoiceResult })
 
   // Preferences state
   const [preferences, setPreferences] = useState({
@@ -56,7 +81,7 @@ export default function ChatPage() {
   }, [messages])
 
   // Send message
-  const handleSend = async (e, overrideText) => {
+  const handleSend = async (e, overrideText, overrideRecommendedIds) => {
     if (e) e.preventDefault()
     const textToSend = (overrideText ?? input).trim()
     if (!textToSend || sending) return
@@ -70,6 +95,7 @@ export default function ChatPage() {
     setMessages((prev) => [...prev, userMessage])
     if (!overrideText) setInput('')
     setSending(true)
+    setQuickReplies([])
 
     // Prepare message history formatted for backend (role, content)
     // Send only the text and roles to save bandwidth/context
@@ -79,26 +105,50 @@ export default function ChatPage() {
     }))
 
     try {
-      const res = await chatAPI.send(userMessage.content, chatHistory)
-      
+      const res = await chatAPI.send(
+        userMessage.content,
+        chatHistory,
+        overrideRecommendedIds ?? lastRecommendedIds,
+        checkout,
+      )
+
+      const data = res.data
       const botMessage = {
         role: 'assistant',
-        content: res.data.message,
-        recommendations: res.data.recommendations || [],
-        total: res.data.total,
-        reasoning: res.data.reasoning,
-        current_state: res.data.current_state || 'BROWSING',
-        action: res.data.action || 'NONE',
-        missing_details: res.data.missing_details || [],
-        checkout_items: res.data.checkout_items || [],
-        recipe_mode: res.data.recipe_mode || false,
-        skipped_ingredients: res.data.skipped_ingredients || [],
-        cart_optimization: res.data.cart_optimization || null,
-        amazon_departments: res.data.amazon_departments || [],
+        content: data.message,
+        recommendations: data.recommendations || [],
+        total: data.total,
+        reasoning: data.reasoning,
+        current_state: data.current_state || 'BROWSING',
+        action: data.action || 'NONE',
+        missing_details: data.missing_details || [],
+        checkout_items: data.checkout_items || [],
+        recipe_mode: data.recipe_mode || false,
+        skipped_ingredients: data.skipped_ingredients || [],
+        cart_optimization: data.cart_optimization || null,
+        amazon_departments: data.amazon_departments || [],
+        order_id: data.order_id || '',
         timestamp: new Date().toISOString()
       }
-      
+
       setMessages((prev) => [...prev, botMessage])
+
+      // Update agent / checkout state
+      setCheckout(data.checkout || null)
+      setQuickReplies(data.quick_replies || [])
+      if (data.recommendations && data.recommendations.length > 0) {
+        setLastRecommendedIds(data.recommendations.map((r) => r.id))
+      }
+
+      // Speak the response (Alexa-style)
+      if (voiceEnabled && ttsSupported && data.speak !== false) {
+        speak(data.message)
+      }
+
+      // Drive the purchase flow: redirect to the payment portal
+      if (data.action === 'REDIRECT_TO_PAYMENT' && data.order_id) {
+        setTimeout(() => navigate(`/payment/${data.order_id}`), 1600)
+      }
     } catch (err) {
       const errorMessage = {
         role: 'assistant',
@@ -125,6 +175,27 @@ export default function ChatPage() {
 
   const handleSuggestionClick = (text) => {
     setInput(text)
+  }
+
+  // Buy Now from a product card — start the agent checkout for that single item
+  const handleBuyNow = (product) => {
+    if (!product?.id || sending) return
+    handleSend(null, `I want to buy ${product.name}`, [product.id])
+  }
+
+  // Tappable quick replies (also spoken-friendly)
+  const handleQuickReply = (text) => {
+    handleSend(null, text)
+  }
+
+  // Toggle the mic on/off
+  const toggleMic = () => {
+    if (listening) {
+      stopListening()
+    } else {
+      stopSpeaking()
+      startListening()
+    }
   }
 
   // Save profile preferences
@@ -177,19 +248,38 @@ export default function ChatPage() {
             <div className="flex items-center gap-2">
               <div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse" />
               <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">QuickBot AI Assistant</span>
+              {speaking && (
+                <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 ml-1">
+                  <Volume2 size={12} className="animate-pulse" /> Speaking…
+                </span>
+              )}
             </div>
-            <button
-              onClick={clearChat}
-              className="text-xs text-gray-400 hover:text-red-500 font-semibold flex items-center gap-1 transition-colors px-2 py-1 hover:bg-red-50 rounded-lg"
-            >
-              <Trash2 size={12} /> Clear Chat
-            </button>
+            <div className="flex items-center gap-2">
+              {ttsSupported && (
+                <button
+                  onClick={() => { setVoiceEnabled((v) => !v); stopSpeaking() }}
+                  title={voiceEnabled ? 'Voice replies on' : 'Voice replies off'}
+                  className={`text-xs font-semibold flex items-center gap-1 transition-colors px-2 py-1 rounded-lg ${
+                    voiceEnabled ? 'text-green-700 bg-green-50 hover:bg-green-100' : 'text-gray-400 hover:bg-gray-50'
+                  }`}
+                >
+                  {voiceEnabled ? <Volume2 size={13} /> : <VolumeX size={13} />}
+                  <span className="hidden sm:inline">Voice</span>
+                </button>
+              )}
+              <button
+                onClick={clearChat}
+                className="text-xs text-gray-400 hover:text-red-500 font-semibold flex items-center gap-1 transition-colors px-2 py-1 hover:bg-red-50 rounded-lg"
+              >
+                <Trash2 size={12} /> Clear Chat
+              </button>
+            </div>
           </div>
 
           {/* Messages Scroll Area */}
           <div className="flex-1 overflow-y-auto p-6 space-y-6 chat-scroll bg-gray-50/30">
             {messages.map((msg, i) => (
-              <MessageBubble key={i} message={msg} />
+              <MessageBubble key={i} message={msg} onBuyNow={handleBuyNow} />
             ))}
             
             {/* Thinking Indicator */}
@@ -235,16 +325,47 @@ export default function ChatPage() {
 
           {/* Bottom Chat Input Form */}
           <form onSubmit={handleSend} className="p-4 border-t border-gray-100 bg-white">
+            {/* Quick replies (tappable + spoken-friendly) */}
+            {quickReplies.length > 0 && !sending && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {quickReplies.map((qr, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => handleQuickReply(qr)}
+                    className="px-3 py-1.5 rounded-full border border-green-200 bg-green-50 text-green-700 text-xs font-semibold hover:bg-green-100 transition-all btn-press"
+                  >
+                    {qr}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="flex gap-3 bg-gray-50 rounded-2xl p-2 border border-gray-100 input-glow">
               <input
                 id="chat-input"
                 type="text"
-                value={input}
+                value={listening ? (interim || 'Listening…') : input}
                 onChange={(e) => setInput(e.target.value)}
-                disabled={sending}
-                placeholder="Ask QuickBot for recommendations, or try 'cook paneer butter masala for 3'..."
+                disabled={sending || listening}
+                placeholder="Ask QuickBot, or say 'I want to buy this'…"
                 className="flex-1 bg-transparent px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none"
               />
+              {sttSupported && (
+                <button
+                  type="button"
+                  onClick={toggleMic}
+                  disabled={sending}
+                  title={listening ? 'Stop listening' : 'Speak to QuickBot'}
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all btn-press flex-shrink-0 ${
+                    listening
+                      ? 'bg-red-500 text-white shadow-lg animate-pulse'
+                      : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                  }`}
+                >
+                  <Mic size={16} />
+                </button>
+              )}
               <button
                 id="chat-submit"
                 type="submit"
@@ -255,7 +376,9 @@ export default function ChatPage() {
               </button>
             </div>
             <p className="text-[10px] text-gray-400 text-center mt-2">
-              🤖 QuickBot uses weather, time, and your profile to personalize recommendations. Try a recipe!
+              {sttSupported
+                ? '🎙️ Tap the mic to shop hands-free — say "buy this" and QuickBot completes the order.'
+                : '🤖 QuickBot personalizes recommendations. Say "buy this" to start an order.'}
             </p>
           </form>
 

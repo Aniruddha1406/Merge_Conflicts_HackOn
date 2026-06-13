@@ -37,7 +37,13 @@ export const authAPI = {
 }
 
 export const chatAPI = {
-  send: (message, history) => api.post('/chat', { message, history }),
+  send: (message, history, lastRecommendedIds = [], checkout = null) =>
+    api.post('/chat', {
+      message,
+      history,
+      last_recommended_ids: lastRecommendedIds,
+      checkout,
+    }),
 }
 
 export const productsAPI = {
@@ -63,6 +69,28 @@ export const profileAPI = {
 
 export const recipeAPI = {
   parse: (recipe, servings = 2) => api.post('/recipe/parse', { recipe, servings }),
+}
+
+export const addressAPI = {
+  list: () => api.get('/addresses'),
+  create: (data) => api.post('/addresses', data),
+  setDefault: (id) => api.put(`/addresses/${id}/default`),
+  remove: (id) => api.delete(`/addresses/${id}`),
+}
+
+export const paymentAPI = {
+  list: () => api.get('/payment-methods'),
+  create: (data) => api.post('/payment-methods', data),
+  setDefault: (id) => api.put(`/payment-methods/${id}/default`),
+  remove: (id) => api.delete(`/payment-methods/${id}`),
+}
+
+export const ordersAPI = {
+  list: () => api.get('/orders'),
+  get: (id) => api.get(`/orders/${id}`),
+  create: (data) => api.post('/orders', data),
+  pay: (id, paymentMethodId = '') =>
+    api.post(`/orders/${id}/pay`, { payment_method_id: paymentMethodId }),
 }
 
 export default api

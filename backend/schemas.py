@@ -62,9 +62,17 @@ class ChatMessage(BaseModel):
     content: str
 
 
+class CheckoutState(BaseModel):
+    """Conversational checkout state echoed between client and server."""
+    stage: str = ""                 # "" | await_address | await_payment | await_confirm
+    selected_ids: List[str] = []    # product ids the user is buying
+
+
 class ChatRequest(BaseModel):
     message: str
     history: List[ChatMessage] = []
+    last_recommended_ids: List[str] = []   # ids from the most recent recommendation
+    checkout: Optional[CheckoutState] = None
 
 
 class RecommendedProduct(BaseModel):
@@ -136,6 +144,11 @@ class ChatResponse(BaseModel):
     missing_details: List[str] = []          # e.g. ["delivery_address", "payment_method"]
     action: str = "NONE"                     # NONE | ASK_FOR_INFO | REDIRECT_TO_PAYMENT
     checkout_items: List[str] = []           # Product IDs user wants to buy
+    # Agent / voice checkout flow
+    checkout: Optional["CheckoutState"] = None   # updated checkout state for the client to echo back
+    order_id: str = ""                       # set when an order is created (redirect target)
+    quick_replies: List[str] = []            # suggested tappable/spoken replies
+    speak: bool = True                       # whether the client should speak this message
     # Amazon department-grouped view
     amazon_departments: List[AmazonDepartment] = []
     # Existing feature fields
@@ -202,3 +215,81 @@ class RecipeResponse(BaseModel):
     matched_products: List[RecommendedProduct]
     total: float
     message: str
+
+
+# ── Addresses ─────────────────────────────────────────────────────────────────
+
+class AddressCreate(BaseModel):
+    full_name: str = ""
+    phone: str = ""
+    line1: str
+    line2: str = ""
+    city: str = ""
+    state: str = ""
+    pincode: str = ""
+    is_default: bool = True
+
+
+class AddressResponse(BaseModel):
+    id: str
+    full_name: str
+    phone: str
+    line1: str
+    line2: str
+    city: str
+    state: str
+    pincode: str
+    is_default: bool
+    one_line: str
+    model_config = {"from_attributes": True}
+
+
+# ── Payment Methods ───────────────────────────────────────────────────────────
+
+class PaymentMethodCreate(BaseModel):
+    type: str                 # card | upi | cod | netbanking | wallet
+    label: str = ""
+    details: str = ""
+    is_default: bool = True
+
+
+class PaymentMethodResponse(BaseModel):
+    id: str
+    type: str
+    label: str
+    details: str
+    is_default: bool
+    model_config = {"from_attributes": True}
+
+
+# ── Orders ────────────────────────────────────────────────────────────────────
+
+class OrderItemResponse(BaseModel):
+    product_id: str
+    product_name: str
+    quantity: int
+    price_at_purchase: float
+    model_config = {"from_attributes": True}
+
+
+class OrderResponse(BaseModel):
+    id: str
+    total_amount: float
+    delivery_charge: float
+    status: str
+    delivery_address: str = ""
+    payment_method: str = ""
+    payment_status: str = "unpaid"
+    items: List[OrderItemResponse] = []
+    model_config = {"from_attributes": True}
+
+
+class CreateOrderRequest(BaseModel):
+    """Create an order from explicit product ids (used by the agent checkout)."""
+    product_ids: List[str] = []
+    address_id: str = ""        # optional; defaults to user's default address
+    payment_method_id: str = "" # optional; defaults to user's default payment method
+
+
+class PayOrderRequest(BaseModel):
+    payment_method_id: str = ""

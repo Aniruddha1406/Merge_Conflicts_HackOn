@@ -6,6 +6,9 @@ import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import ChatPage from './pages/ChatPage'
 import ProductsPage from './pages/ProductsPage'
+import PaymentPage from './pages/PaymentPage'
+import AccountPage from './pages/AccountPage'
+import OrdersPage from './pages/OrdersPage'
 
 function Spinner() {
   return (
@@ -39,6 +42,9 @@ function AppRoutes() {
       <Route path="/register" element={<AuthRoute><RegisterPage /></AuthRoute>} />
       <Route path="/chat"     element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
       <Route path="/products" element={<ProtectedRoute><ProductsPage /></ProtectedRoute>} />
+      <Route path="/payment/:orderId" element={<ProtectedRoute><PaymentPage /></ProtectedRoute>} />
+      <Route path="/account"  element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
+      <Route path="/orders"   element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
       <Route path="*"         element={<Navigate to="/chat" replace />} />
     </Routes>
   )

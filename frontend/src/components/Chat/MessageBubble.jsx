@@ -1,8 +1,10 @@
 import React from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Zap, User } from 'lucide-react'
 import ProductRecommendation from './ProductRecommendation'
 
-export default function MessageBubble({ message }) {
+export default function MessageBubble({ message, onBuyNow }) {
+  const navigate = useNavigate()
   const isBot = message.role === 'assistant'
 
   const timeStr = message.timestamp
@@ -42,17 +44,19 @@ export default function MessageBubble({ message }) {
               <div className="mt-2 flex items-center gap-2 p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200 animate-fade-in">
                 <span className="text-lg">✅</span>
                 <div className="flex-1">
-                  <p className="text-green-800 text-xs font-bold">Order ready for checkout!</p>
+                  <p className="text-green-800 text-xs font-bold">Order ready for payment!</p>
                   <p className="text-green-600 text-[10px] mt-0.5">
                     {message.checkout_items?.length || 0} item(s) confirmed
                   </p>
                 </div>
-                <button
-                  onClick={() => window.location.href = '/cart'}
-                  className="px-3 py-1.5 bg-green-gradient text-white text-xs font-bold rounded-lg shadow-green hover:opacity-90 transition-all btn-press"
-                >
-                  Go to Checkout →
-                </button>
+                {message.order_id && (
+                  <button
+                    onClick={() => navigate(`/payment/${message.order_id}`)}
+                    className="px-3 py-1.5 bg-green-gradient text-white text-xs font-bold rounded-lg shadow-green hover:opacity-90 transition-all btn-press"
+                  >
+                    Proceed to Payment →
+                  </button>
+                )}
               </div>
             )}
 
@@ -65,6 +69,7 @@ export default function MessageBubble({ message }) {
                 skippedIngredients={message.skipped_ingredients}
                 cartOptimization={message.cart_optimization}
                 amazonDepartments={message.amazon_departments}
+                onBuyNow={onBuyNow}
               />
             )}
           </div>

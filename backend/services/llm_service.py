@@ -68,115 +68,30 @@ def is_followup_message(message: str, history: List[Dict]) -> bool:
     return False
 
 
-SYSTEM_PROMPT = """You are QuickBot, an advanced AI voice and chat shopping assistant for a quick-commerce store (like Blinkit/Zepto/Amazon India).
-Your goal is to handle the full end-to-end purchasing process: from product discovery to collecting necessary order details and finalizing the checkout.
+SYSTEM_PROMPT = """You are QuickBot, an AI voice+chat shopping assistant. Help users find products and complete purchases.
 
-You will receive the user's request, their current profile (including saved address/payment info), and a relevant product catalog.
-
-### 1. VOICE-FIRST COMMUNICATION
-Keep your `message` extremely conversational, natural, and brief (1-2 short sentences optimised for text-to-speech). Avoid long lists in text. If asking for details, ask one question at a time.
-
-### 2. CONVERSATIONAL MEMORY & INTENT TRACKING
-You are engaged in an ongoing, multi-turn dialogue. Always evaluate the user's latest message against the recent chat history.
-- **Follow-up Questions:** If the user asks for details, benefits, or clarification about a product you just recommended, answer conversationally. Do NOT generate a new list of products unless asked.
-- **New Searches:** If the user shifts intent, transition smoothly to generating a new structured list based on the injected RAG context.
-
-### 3. STATE MANAGEMENT & CHECKOUT FLOW
-- If the user is just asking for items, stay in **"BROWSING"** state and provide `recommendations`.
-- If the user says "I want to buy this", "add to cart", or "Checkout", check the provided User Profile for an address and payment method.
-- If details are missing, transition to **"COLLECTING_INFO"**, set `action` to "ASK_FOR_INFO", and populate `missing_details`. Your `message` should ask the user for the first missing detail.
-- If all details are present (or the user just provided the last missing one), transition to **"CHECKOUT_READY"**, set `action` to "REDIRECT_TO_PAYMENT", and confirm the order in your `message`.
-
-### 4. ADVANCED RAG & ANTI-HALLUCINATION PROTOCOL
-You will receive data chunks from our vector database inside the `<RETRIEVED_CATALOG_CONTEXT>` block.
-- **ABSOLUTE RULE:** You must ONLY suggest products explicitly present in that block.
-- NEVER invent, hallucinate, or guess product names, brands, or prices.
-
-### 5. COMPREHENSIVE AMAZON DEPARTMENTS & BROWSE NODES
-Classify retrieved items using this taxonomy:
-
-1. 📦 Grocery & Gourmet Foods
-   └── [Sub-Categories: Ready-to-Eat Meals, Cooking Pastes, Spices, Snacks, Beverages, Dairy, Fruits, Vegetables]
-2. 📦 Home & Kitchen
-   └── [Sub-Categories: Furniture, Home Décor, Kitchen Tools & Accessories]
-3. 📦 Electronics & Accessories
-   └── [Sub-Categories: Smartphones, Laptops & Notebooks, Tablets, Mobile Accessories]
-4. 📦 Clothing, Shoes & Jewelry
-   └── [Sub-Categories: Men's Shirts, Men's Shoes, Women's Dresses, Women's Bags, Women's Jewellery, Women's Shoes, Tops & T-Shirts, Sunglasses]
-5. 📦 Beauty & Personal Care
-   └── [Sub-Categories: Makeup & Beauty, Skin Care, Fragrances & Perfumes]
-6. 📦 Watches & Accessories
-   └── [Sub-Categories: Men's Watches, Women's Watches]
-7. 📦 Sports, Fitness & Outdoors
-   └── [Sub-Categories: Sports & Fitness Accessories]
-8. 📦 Automotive
-   └── [Sub-Categories: Motorcycle Accessories, Car & Vehicle Accessories]
-
-Group the valid retrieved items into their respective Amazon departments.
-
-### 6. ABSOLUTE BUDGET CONSTRAINT DOMINANCE
-- The numerical budget parameter is your supreme programmatic wall.
-- If any item's price exceeds the budget, strip it immediately from your output.
-- Erase any department/category if ALL of its items are over budget.
-
-### 7. AMAZON-STANDARD SPECIFICATIONS
-- Format every item using Amazon's clean syntax: `[Brand Name] + [Product Title] + ([Size/Variant])`.
-
-### 8. RESPONSE FORMAT
-Respond ONLY with valid JSON in exactly this format:
+Respond ONLY with valid JSON (no markdown):
 {
-  "message": "Friendly, concise response in 1-2 short sentences (optimised for voice TTS).",
+  "message": "Friendly 1-2 sentence response for TTS.",
   "current_state": "BROWSING",
   "missing_details": [],
   "action": "NONE",
-  "amazon_departments": [
-    {
-      "department": "📦 Department Name",
-      "categories": [
-        {
-          "name": "Sub-Category Name",
-          "items": [
-            {
-              "id": "product_id from catalog",
-              "formatted_name": "[Brand] Product Title (Size/Variant)",
-              "price": 99,
-              "reason": "why this product fits the user's intent"
-            }
-          ]
-        }
-      ]
-    }
-  ],
-  "recommendations": [
-    {
-      "id": "product_id from catalog",
-      "name": "exact product name from catalog",
-      "price": 99,
-      "category": "category name",
-      "brand": "brand name",
-      "unit": "quantity/unit",
-      "reason": "why this product fits the request"
-    }
-  ],
+  "amazon_departments": [{"department":"📦 Dept","categories":[{"name":"Sub-Cat","items":[{"id":"p1","formatted_name":"Brand Name (unit)","price":99,"reason":"why"}]}]}],
+  "recommendations": [{"id":"p1","name":"Name","price":99,"category":"cat","brand":"Brand","unit":"unit","reason":"why"}],
   "checkout_items": [],
   "total": 0,
-  "reasoning": "Brief explanation of your logic and state transition."
+  "reasoning": "Brief logic."
 }
 
-CRITICAL RULES:
-1. ONLY recommend products that exist in the <RETRIEVED_CATALOG_CONTEXT>. NEVER invent products.
-2. ONLY recommend products with in_stock: true.
-3. STRICT BUDGET CONSTRAINT: Treat the BUDGET value as a hard ceiling. No exceptions.
-4. RELEVANCE & SEMANTIC FILTERING: Match products to user INTENT. Never mix categories unless explicitly asked.
-5. For SUBSTITUTED products (marked is_substitute: true), mention the substitution in your message.
-6. If contextual info mentions weather/events, subtly incorporate relevant suggestions ONLY if they fit budget and intent.
-7. Keep message friendly, conversational, and SHORT (use ₹ for currency).
-8. Respond ONLY with JSON, no markdown code blocks, no extra text.
-9. The "recommendations" array must mirror all items from "amazon_departments" in a flat list for backward compatibility.
-10. For follow-up questions, respond conversationally with empty recommendations and amazon_departments arrays.
-11. current_state must be one of: BROWSING, COLLECTING_INFO, CHECKOUT_READY.
-12. action must be one of: NONE, ASK_FOR_INFO, REDIRECT_TO_PAYMENT.
-13. checkout_items should contain product IDs only when the user explicitly wants to buy them."""
+RULES:
+- ONLY recommend products present in <RETRIEVED_CATALOG_CONTEXT>. NEVER invent products.
+- ONLY recommend in_stock:true products.
+- HARD BUDGET CAP: total of all items MUST be <= BUDGET. No exceptions.
+- "recommendations" must mirror all "amazon_departments" items as a flat list.
+- For follow-up questions (details about a recommended product), return empty recommendations and answer in message.
+- current_state: BROWSING | COLLECTING_INFO | CHECKOUT_READY
+- action: NONE | ASK_FOR_INFO | REDIRECT_TO_PAYMENT
+- Keep message short, use ₹ for currency."""
 
 
 FOLLOWUP_SYSTEM_PROMPT = """You are QuickBot, a friendly AI voice shopping assistant. The user is asking a follow-up question about products you previously recommended.
@@ -277,9 +192,9 @@ def get_chat_response(
 
     # ── New Search: Full RAG Pipeline ────────────────────────────────────
 
-    # Scale the candidate pool with the budget
-    target_items = max(3, min(20, budget // 100))
-    candidate_limit = max(20, min(60, target_items * 4))
+    # Scale the candidate pool with the budget — cap tightly to keep tokens down
+    target_items = max(3, min(12, budget // 150))
+    candidate_limit = max(12, min(25, target_items * 3))
 
     # Retrieve semantically relevant products matching the query and filters
     relevant_products = query_relevant_products_with_substitution(
@@ -300,7 +215,7 @@ def get_chat_response(
         sorted_by_price = sorted(relevant_products, key=lambda x: x.get("price", 0) or 0)
         budget_filtered_products = sorted_by_price[:3]
 
-    # Build RAG context grouped by department for the LLM
+    # Build RAG context — send only essential fields to keep token count low
     by_category = {}
     for p in budget_filtered_products:
         cat = p["category"]
@@ -309,27 +224,16 @@ def get_chat_response(
         entry = {
             "id": p["id"],
             "name": p["name"],
-            "formatted_name": format_product_name(p),
             "price": p["price"],
             "brand": p["brand"],
             "unit": p["unit"],
-            "category": cat,
-            "display_category": get_display_category(cat),
             "in_stock": p["in_stock"],
-            "image_url": p["image_url"],
-            "tags": p["tags"],
-            "rating": p.get("rating", 4.0),
-            "is_vegetarian": p["is_vegetarian"],
-            "is_vegan": p["is_vegan"],
-            "is_high_protein": p["is_high_protein"],
         }
         if p.get("is_substitute"):
             entry["is_substitute"] = True
             entry["original_product"] = p.get("original_product", "")
-            entry["substitution_reason"] = p.get("substitution_reason", "")
-        
         by_category[cat].append(entry)
-    catalog_json = json.dumps(by_category, ensure_ascii=False)
+    catalog_json = json.dumps(by_category, ensure_ascii=False, separators=(',', ':'))
 
     # Build contextual profile string
     profile_context = ""
@@ -403,26 +307,17 @@ def get_chat_response(
     )
     system_text = SYSTEM_PROMPT + profile_context + rag_block
 
-    # Build message history for Groq (limit to last 6 messages)
+    # Build message history for Groq — limit to last 4 messages to save tokens
     messages = [{"role": "system", "content": system_text}]
-    filtered_history = history[-6:]
+    filtered_history = history[-4:]
     if filtered_history and filtered_history[0].get("role") == "assistant":
         filtered_history = filtered_history[1:]
         
     for h in filtered_history:
         messages.append({"role": h["role"], "content": h["content"]})
 
-    # Reinforce JSON format on current turn
-    user_turn = (
-        f"{message}\n\n"
-        f"(Respond ONLY with a single valid JSON object with "
-        f"'message', 'current_state', 'action', 'missing_details', 'amazon_departments', "
-        f"'recommendations', 'checkout_items', 'total', and 'reasoning' fields. "
-        f"Recommend about {target_items} products, group them by Amazon departments, "
-        f"and keep the total within ₹{budget}. "
-        f"Do not include any text outside the JSON.)"
-    )
-    messages.append({"role": "user", "content": user_turn})
+    # Minimal user turn — no verbose footer to save tokens
+    messages.append({"role": "user", "content": message})
 
     # Call Groq API
     response = client.chat.completions.create(
@@ -556,8 +451,8 @@ def _handle_followup(message: str, history: List[Dict], budget: float) -> Dict:
     """
     messages = [{"role": "system", "content": FOLLOWUP_SYSTEM_PROMPT}]
     
-    # Include recent history for context (last 8 messages for follow-ups)
-    filtered_history = history[-8:]
+    # Include recent history for context (last 4 messages for follow-ups)
+    filtered_history = history[-4:]
     if filtered_history and filtered_history[0].get("role") == "assistant":
         filtered_history = filtered_history[1:]
     

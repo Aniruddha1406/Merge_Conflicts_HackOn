@@ -1,6 +1,6 @@
 import React from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { ShoppingCart, MessageSquare, Package, LogOut, Zap } from 'lucide-react'
+import { ShoppingCart, MessageSquare, Package, LogOut, Zap, User as UserIcon, ClipboardList } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useCart } from '../../context/CartContext'
 
@@ -28,6 +28,8 @@ export default function Header() {
           {[
             { path: '/chat', label: 'AI Chat', icon: MessageSquare },
             { path: '/products', label: 'Products', icon: Package },
+            { path: '/orders', label: 'Orders', icon: ClipboardList },
+            { path: '/account', label: 'Account', icon: UserIcon },
           ].map(({ path, label, icon: Icon }) => (
             <Link
               key={path}

@@ -15,7 +15,7 @@ const CATEGORY_EMOJI = {
   instant: '🍜', bakery: '🥖',
 }
 
-function ProductCard({ product }) {
+function ProductCard({ product, onBuyNow }) {
   const { addToCart } = useCart()
   const [added, setAdded] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -121,6 +121,16 @@ function ProductCard({ product }) {
         >
           {added ? <><Check size={12} /> Added!</> : loading ? '...' : <><Plus size={12} /> Add to Cart</>}
         </button>
+
+        {/* Buy Now — starts the agent checkout for this item */}
+        {onBuyNow && product.in_stock && (
+          <button
+            onClick={() => onBuyNow(product)}
+            className="w-full mt-1.5 py-1.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all btn-press bg-amber-400 text-white hover:bg-amber-500 shadow-sm"
+          >
+            <ShoppingCart size={12} /> Buy Now
+          </button>
+        )}
       </div>
     </div>
   )
@@ -236,7 +246,7 @@ function DepartmentItemRow({ item, onAdd }) {
 }
 
 
-export default function ProductRecommendation({ recommendations, total, reasoning, recipeMode, skippedIngredients, cartOptimization, amazonDepartments }) {
+export default function ProductRecommendation({ recommendations, total, reasoning, recipeMode, skippedIngredients, cartOptimization, amazonDepartments, onBuyNow }) {
   const { addToCart } = useCart()
   const [addingAll, setAddingAll] = useState(false)
   const [allAdded, setAllAdded] = useState(false)
@@ -351,7 +361,7 @@ export default function ProductRecommendation({ recommendations, total, reasonin
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
           {recommendations.map((product, i) => (
-            <ProductCard key={product.id || i} product={product} />
+            <ProductCard key={product.id || i} product={product} onBuyNow={onBuyNow} />
           ))}
         </div>
       )}

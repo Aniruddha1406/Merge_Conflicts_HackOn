@@ -211,3 +211,112 @@ def get_cart_optimization_suggestions(
         "suggested_products": suggestions,
         "savings": best_threshold["savings"],
     }
+
+
+def create_order_from_products(
+    user_id: str,
+    product_ids: List[str],
+    db: Session,
+    delivery_address: str = "",
+    payment_method: str = "",
+    quantities: Optional[Dict[str, int]] = None,
+    status: str = "pending",
+    payment_status: str = "unpaid",
+) -> Optional[Dict]:
+    """
+    Create an order from an explicit list of product ids (agent checkout).
+
+    Quantities default to whatever is in the user's cart for that product, else 1.
+    The order starts as pending/unpaid and is marked completed/paid by the payment
+    portal (pay_order). Purchased items are removed from the cart.
+    """
+    if not product_ids:
+        return None
+
+    quantities = quantities or {}
+    cart_qty = {
+        ci.product_id: ci.quantity
+        for ci in db.query(CartItem).filter(CartItem.user_id == user_id).all()
+    }
+
+    total = 0.0
+    order_items_data = []
+    for pid in product_ids:
+        product = get_product_by_id(pid)
+        if not product or not product.get("in_stock", True):
+            continue
+        qty = quantities.get(pid) or cart_qty.get(pid) or 1
+        price = product.get("price", 0)
+        total += price * qty
+        order_items_data.append({
+            "product_id": pid,
+            "product_name": product["name"],
+            "quantity": qty,
+            "price_at_purchase": price,
+        })
+
+    if not order_items_data:
+        return None
+
+    from config import settings
+    delivery_charge = 0.0 if total >= settings.free_delivery_threshold else settings.delivery_charge
+
+    order = Order(
+        user_id=user_id,
+        total_amount=total,
+        delivery_charge=delivery_charge,
+        status=status,
+        delivery_address=delivery_address,
+        payment_method=payment_method,
+        payment_status=payment_status,
+    )
+    db.add(order)
+    db.flush()
+
+    for item_data in order_items_data:
+        db.add(OrderItem(order_id=order.id, **item_data))
+
+    # Remove the purchased items from the cart
+    purchased_ids = [d["product_id"] for d in order_items_data]
+    db.query(CartItem).filter(
+        CartItem.user_id == user_id,
+        CartItem.product_id.in_(purchased_ids),
+    ).delete(synchronize_session=False)
+
+    db.commit()
+    db.refresh(order)
+
+    return {
+        "order_id": order.id,
+        "total_amount": total,
+        "delivery_charge": delivery_charge,
+        "items_count": len(order_items_data),
+        "status": order.status,
+        "payment_status": order.payment_status,
+    }
+
+
+def pay_order(user_id: str, order_id: str, db: Session, payment_method: str = "") -> Optional[Dict]:
+    """Mark an order as paid/completed (called by the payment portal)."""
+    order = (
+        db.query(Order)
+        .filter(Order.id == order_id, Order.user_id == user_id)
+        .first()
+    )
+    if not order:
+        return None
+
+    order.payment_status = "paid"
+    order.status = "completed"
+    if payment_method:
+        order.payment_method = payment_method
+    db.commit()
+    db.refresh(order)
+
+    return {
+        "order_id": order.id,
+        "status": order.status,
+        "payment_status": order.payment_status,
+        "total_amount": order.total_amount,
+        "delivery_charge": order.delivery_charge,
+    }

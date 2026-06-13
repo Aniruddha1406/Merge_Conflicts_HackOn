@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     # Business Rules
     free_delivery_threshold: float = 399.0
     delivery_charge: float = 49.0
+    coupon_threshold: float = 750.0
+    coupon_discount: float = 75.0
     coupon_threshold: float = 499.0
     coupon_discount: float = 75.0
 

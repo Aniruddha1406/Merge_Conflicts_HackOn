@@ -3,10 +3,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from database import engine
 import models
-from routers import auth, chat, products, cart, profile, recipe
+from routers import auth, chat, products, cart, profile, recipe, addresses, payments, orders
 
 # Create all DB tables on startup
 models.Base.metadata.create_all(bind=engine)
+
+# Apply non-destructive column migrations for pre-existing tables
+from database import run_migrations
+run_migrations()
 
 app = FastAPI(
     title="QuickCommerce AI",
@@ -29,6 +33,9 @@ app.include_router(products.router)
 app.include_router(cart.router)
 app.include_router(profile.router)
 app.include_router(recipe.router)
+app.include_router(addresses.router)
+app.include_router(payments.router)
+app.include_router(orders.router)
 
 
 @app.get("/")

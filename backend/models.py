@@ -18,6 +18,8 @@ class User(Base):
     cart_items = relationship("CartItem", back_populates="user", cascade="all, delete-orphan")
     profile = relationship("UserProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
     orders = relationship("Order", back_populates="user", cascade="all, delete-orphan")
+    addresses = relationship("Address", back_populates="user", cascade="all, delete-orphan")
+    payment_methods = relationship("PaymentMethod", back_populates="user", cascade="all, delete-orphan")
 
 
 class CartItem(Base):
@@ -56,6 +58,10 @@ class Order(Base):
     total_amount = Column(Float, nullable=False)
     delivery_charge = Column(Float, default=0.0)
     status = Column(String, default="completed")  # completed, cancelled, pending
+    # Checkout / fulfilment details
+    delivery_address = Column(Text, default="")        # snapshot of address used
+    payment_method = Column(String, default="")        # snapshot of payment label used
+    payment_status = Column(String, default="unpaid")  # unpaid | paid
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     user = relationship("User", back_populates="orders")
@@ -74,3 +80,41 @@ class OrderItem(Base):
     price_at_purchase = Column(Float, nullable=False)  # Lock price at time of order
     
     order = relationship("Order", back_populates="items")
+
+
+class Address(Base):
+    """Saved delivery addresses for a user."""
+    __tablename__ = "addresses"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    full_name = Column(String, default="")
+    phone = Column(String, default="")
+    line1 = Column(String, nullable=False)          # house / street
+    line2 = Column(String, default="")              # area / landmark
+    city = Column(String, default="")
+    state = Column(String, default="")
+    pincode = Column(String, default="")
+    is_default = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="addresses")
+
+    def one_line(self) -> str:
+        parts = [self.line1, self.line2, self.city, self.state, self.pincode]
+        return ", ".join(p for p in parts if p)
+
+
+class PaymentMethod(Base):
+    """Saved payment methods for a user (demo / mock — no real card data)."""
+    __tablename__ = "payment_methods"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    type = Column(String, nullable=False)           # card | upi | cod | netbanking | wallet
+    label = Column(String, default="")              # e.g. "Visa •••• 4242", "user@upi", "Cash on Delivery"
+    details = Column(String, default="")            # masked / non-sensitive detail
+    is_default = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="payment_methods")
