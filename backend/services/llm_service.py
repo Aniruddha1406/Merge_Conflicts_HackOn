@@ -35,6 +35,42 @@ from services.taxonomy_service import (
 client = Groq(api_key=settings.groq_api_key)
 
 
+def _extract_json(raw: str) -> dict:
+    """
+    Best-effort extraction of a JSON object from an LLM response.
+
+    LLMs occasionally wrap JSON in markdown fences, add stray prose, or emit a
+    trailing comma. A naive json.loads on that content throws and we'd lose the
+    whole recommendation list. This strips fences, isolates the outermost
+    {...} block and repairs trailing commas before parsing.
+    """
+    if not raw:
+        return {}
+    content = raw.strip()
+
+    # Strip markdown code fences if present
+    if "```json" in content:
+        content = content.split("```json", 1)[1].split("```", 1)[0].strip()
+    elif "```" in content:
+        content = content.split("```", 1)[1].split("```", 1)[0].strip()
+
+    # Isolate the outermost JSON object
+    start = content.find("{")
+    end = content.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        content = content[start:end + 1]
+
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        # Repair common issues: trailing commas before } or ]
+        repaired = re.sub(r",\s*([}\]])", r"\1", content)
+        try:
+            return json.loads(repaired)
+        except json.JSONDecodeError:
+            return {}
+
+
 def _chat_complete(messages: list, max_tokens: int = 4096, temperature: float = 0.3) -> str:
     """
     Wrapper around client.chat.completions.create that automatically falls back
@@ -269,9 +305,11 @@ def get_chat_response(
 
     # ── New Search: Full RAG Pipeline ────────────────────────────────────
 
-    # Scale the candidate pool with the budget — cap tightly to keep tokens down
-    target_items = max(3, min(12, budget // 150))
-    candidate_limit = max(12, min(25, target_items * 3))
+    # Number of products to show. We keep a healthy floor so category browses
+    # ("show me some laptops") always return a full grid rather than 2-3 items,
+    # while still scaling up with a larger budget.
+    target_items = max(8, min(16, budget // 120))
+    candidate_limit = max(20, min(30, target_items * 3))
 
     # ── Vague "more" query resolution ───────────────────────────────────
     # "Show me more options", "more items", "give me more" etc. are too vague
@@ -293,9 +331,18 @@ def get_chat_response(
                     retrieval_query = prev
                     break
 
-    # Blend the user's favourite categories into the retrieval query so the
-    # preference filters genuinely steer the recommendations.
-    if favorite_categories:
+    # Blend the user's favourite categories into the retrieval query ONLY for
+    # generic/open-ended requests ("recommend something", "what's good?").
+    # For an explicit search like "show me some laptops", appending the saved
+    # grocery favourites would pollute the semantic search and bury the actual
+    # category the user asked for, so we leave the query untouched.
+    GENERIC_REQUEST = re.compile(
+        r"\b(recommend|suggest|surprise me|anything|something|what'?s good"
+        r"|what should i|help me shop|ideas?|inspire|popular|trending|deals?|offers?)\b",
+        re.IGNORECASE,
+    )
+    is_generic = bool(GENERIC_REQUEST.search(message)) or bool(VAGUE_MORE.match(message.strip()))
+    if favorite_categories and is_generic:
         retrieval_query = f"{retrieval_query} {' '.join(favorite_categories)}"
 
     # Retrieve semantically relevant products matching the query and filters
@@ -305,6 +352,31 @@ def get_chat_response(
         filters=filters,
         user_profile=user_profile,
     )
+
+    # ── Adaptive budget ──────────────────────────────────────────────────
+    # If the user is browsing a category whose items mostly cost more than their
+    # saved budget (e.g. laptops/furniture vs a ₹500 grocery budget), a hard
+    # budget wall would wrongly strip the category and leave only cheap noise
+    # from other categories. We look at the MOST RELEVANT results (RAG returns
+    # them ranked) and, if their median price exceeds the budget, lift the cap
+    # so the category the user actually searched for is shoppable.
+    in_stock_prices = [
+        (p.get("price", 0) or 0)
+        for p in relevant_products
+        if p.get("in_stock", True)
+    ]
+    top_relevant = [
+        (p.get("price", 0) or 0)
+        for p in relevant_products[: max(6, target_items)]
+        if p.get("in_stock", True)
+    ]
+    if in_stock_prices and top_relevant:
+        top_sorted = sorted(top_relevant)
+        median_relevant = top_sorted[len(top_sorted) // 2]
+        # Lift when the items the user is clearly after sit above their budget
+        if median_relevant > budget:
+            budget = max(in_stock_prices) * 1.15
+            target_items = max(8, min(16, int(budget // 120)))
 
     # ── Pre-LLM Budget Filtering ─────────────────────────────────────────
     # Strip individual items that exceed the budget ceiling BEFORE sending to LLM
@@ -427,17 +499,9 @@ def get_chat_response(
     content = _chat_complete(messages, max_tokens=4096, temperature=0.3)
 
     # Clean JSON extraction
-    content_str = content.strip()
-    if "```json" in content_str:
-        content_str = content_str.split("```json")[1].split("```")[0].strip()
-    elif "```" in content_str:
-        content_str = content_str.split("```")[1].split("```")[0].strip()
-
-    try:
-        result = json.loads(content_str)
-    except json.JSONDecodeError as e:
-        print(f"LLM JSON parse error: {e}. Raw content: {content_str[:200]}")
-        result = {}
+    result = _extract_json(content)
+    if not result:
+        print(f"LLM JSON parse error. Raw content: {content.strip()[:200]}")
 
     # Ensure required fields exist
     result.setdefault("message", "Here are my recommendations for you!")
@@ -483,23 +547,47 @@ def get_chat_response(
 
     result["recommendations"] = enriched
 
-    # ── Enforce budget as hard cap (cumulative) ──────────────────────────
-    if budget and enriched:
-        kept = []
-        running = 0
-        for item in enriched:
-            price = item.get("price", 0) or 0
-            if running + price <= budget:
-                kept.append(item)
-                running += price
-        if not kept:
-            cheapest = min(enriched, key=lambda x: x.get("price", 0) or 0)
-            kept = [cheapest]
-            running = cheapest.get("price", 0) or 0
-        result["recommendations"] = kept
-        result["total"] = running
-    else:
-        result["total"] = sum(r.get("price", 0) for r in enriched)
+    # ── Backfill to a full product grid ──────────────────────────────────
+    # The LLM frequently returns far fewer items than asked (or malformed JSON,
+    # yielding none). For a category browse the user expects a healthy grid, so
+    # we top up from the RAG-retrieved, budget-filtered candidates. Per-item
+    # budget filtering already happened upstream, so these are all in-budget.
+    if len(enriched) < target_items:
+        for candidate in budget_filtered_products:
+            if len(enriched) >= target_items:
+                break
+            pid = candidate["id"]
+            if pid in seen_ids:
+                continue
+            product = get_product_by_id(pid)
+            if not product or not product.get("in_stock", True):
+                continue
+            seen_ids.add(pid)
+            merged = dict(product)
+            if candidate.get("is_substitute"):
+                merged["is_substitute"] = True
+                merged["original_product"] = candidate.get("original_product", "")
+                merged["substitution_reason"] = candidate.get("substitution_reason", "")
+            enriched.append(merged)
+
+    # ── Last resort: never leave a search empty ──────────────────────────
+    # If budget filtering wiped everything out, show the retrieved products
+    # anyway so a category click always surfaces results.
+    if len(enriched) < 4:
+        for candidate in relevant_products:
+            if len(enriched) >= target_items:
+                break
+            pid = candidate["id"]
+            if pid in seen_ids:
+                continue
+            product = get_product_by_id(pid)
+            if not product or not product.get("in_stock", True):
+                continue
+            seen_ids.add(pid)
+            enriched.append(dict(product))
+
+    result["recommendations"] = enriched
+    result["total"] = sum(r.get("price", 0) or 0 for r in enriched)
 
     # ── Build server-side Amazon department grouping ─────────────────────
     # Use the enriched & budget-verified product list for accurate grouping

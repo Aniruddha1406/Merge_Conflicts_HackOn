@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import { ShoppingCart, MessageSquare, Package, LogOut, Zap, User as UserIcon, ClipboardList, CalendarDays, Users } from 'lucide-react'
+import React, { useEffect, useRef, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { ShoppingCart, MessageSquare, Package, LogOut, Zap, User as UserIcon, ClipboardList, CalendarDays, Users, ChevronDown, MapPin, CreditCard, Sparkles } from 'lucide-react'
 import gsap from 'gsap'
 import { useAuth } from '../../context/AuthContext'
 import { useCart } from '../../context/CartContext'
@@ -18,7 +18,10 @@ export default function Header() {
   const { user, logout } = useAuth()
   const { itemCount, setIsOpen } = useCart()
   const location = useLocation()
+  const navigate = useNavigate()
   const headerRef = useRef(null)
+  const menuRef = useRef(null)
+  const [menuOpen, setMenuOpen] = useState(false)
 
   useEffect(() => {
     if (!headerRef.current) return
@@ -28,6 +31,27 @@ export default function Header() {
       { y: 0, opacity: 1, duration: 0.6, ease: 'power3.out' }
     )
   }, [])
+
+  // close dropdown on outside click / route change
+  useEffect(() => {
+    const onClick = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [])
+  useEffect(() => { setMenuOpen(false) }, [location.pathname])
+
+  const go = (path) => { setMenuOpen(false); navigate(path) }
+
+  const MENU = [
+    { label: 'Your Account', desc: 'Profile, addresses & payment', icon: UserIcon, path: '/account' },
+    { label: 'Your Orders', desc: 'Track & view past orders', icon: ClipboardList, path: '/orders' },
+    { label: 'Saved Addresses', desc: 'Manage delivery locations', icon: MapPin, path: '/account' },
+    { label: 'Payment Methods', desc: 'Cards, UPI & more', icon: CreditCard, path: '/account' },
+    { label: 'Meal Plans', desc: 'Your weekly meal plans', icon: CalendarDays, path: '/meal-plan' },
+    { label: 'Group Carts', desc: 'Shop with friends', icon: Users, path: '/group' },
+  ]
 
   return (
     <header ref={headerRef} className="sticky top-0 z-50 w-full glass border-b border-white/40 shadow-sm">
@@ -76,21 +100,70 @@ export default function Header() {
             )}
           </button>
 
-          <div className="flex items-center gap-2 pl-2 border-l border-white/50">
-            <div className="w-9 h-9 bg-green-gradient rounded-full flex items-center justify-center text-white text-sm font-bold select-none shadow-green ring-2 ring-white/60">
-              {user?.username?.charAt(0)?.toUpperCase() || 'U'}
-            </div>
-            <span className="hidden md:block text-sm font-semibold text-gray-700 max-w-[100px] truncate">
-              {user?.username}
-            </span>
+          {/* User dropdown (Amazon-style) */}
+          <div ref={menuRef} className="relative pl-2 border-l border-white/50">
             <button
-              id="logout-btn"
-              onClick={logout}
-              className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-              title="Sign out"
+              onClick={() => setMenuOpen((o) => !o)}
+              className="flex items-center gap-2 py-1 pl-1 pr-2 rounded-xl hover:bg-white/60 transition-colors btn-press"
             >
-              <LogOut size={15} />
+              <div className="w-9 h-9 bg-green-gradient rounded-full flex items-center justify-center text-white text-sm font-bold select-none shadow-green ring-2 ring-white/60">
+                {user?.username?.charAt(0)?.toUpperCase() || 'U'}
+              </div>
+              <div className="hidden md:block text-left leading-tight">
+                <p className="text-[10px] text-gray-500 -mb-0.5">Hello,</p>
+                <span className="text-sm font-bold text-gray-800 max-w-[110px] truncate flex items-center gap-1">
+                  {user?.username}
+                  <ChevronDown size={13} className={`text-gray-400 transition-transform ${menuOpen ? 'rotate-180' : ''}`} />
+                </span>
+              </div>
             </button>
+
+            {menuOpen && (
+              <div className="absolute right-0 mt-2 w-72 glass rounded-2xl shadow-card-hover overflow-hidden animate-slide-up origin-top-right z-50">
+                {/* Account header */}
+                <div className="px-4 py-3.5 bg-green-gradient text-white">
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-full bg-white/20 backdrop-blur flex items-center justify-center text-lg font-bold ring-2 ring-white/40">
+                      {user?.username?.charAt(0)?.toUpperCase() || 'U'}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-bold text-sm truncate">{user?.username}</p>
+                      <p className="text-[11px] text-white/80 truncate">{user?.email}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Menu items */}
+                <div className="py-1.5">
+                  {MENU.map((item) => (
+                    <button
+                      key={item.label}
+                      onClick={() => go(item.path)}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-white/70 transition-colors text-left"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center text-green-700 flex-shrink-0">
+                        <item.icon size={15} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 leading-tight">{item.label}</p>
+                        <p className="text-[11px] text-gray-400 truncate">{item.desc}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Sign out */}
+                <div className="border-t border-white/50 p-1.5">
+                  <button
+                    id="logout-btn"
+                    onClick={() => { setMenuOpen(false); logout() }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-red-600 hover:bg-red-50 transition-colors font-semibold text-sm"
+                  >
+                    <LogOut size={16} /> Sign Out
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

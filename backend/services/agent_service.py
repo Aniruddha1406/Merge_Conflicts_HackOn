@@ -407,9 +407,15 @@ def handle_chat(request, user: User, db: Session) -> Dict:
     if stage == "await_payment":
         return handle_payment(message, selected_ids, user, db)
 
-    # Not mid-checkout: is this a purchase request?
+    # Not mid-checkout: is this a purchase request for a SPECIFIC item?
+    # Only enter checkout if we can resolve concrete products (e.g. "buy this",
+    # "buy all of these", or a named product from the last recommendations).
+    # "I want to buy a laptop" with nothing recommended yet should SEARCH instead.
     if detect_purchase_intent(message):
-        return start_checkout(message, request.last_recommended_ids, user, db)
+        selected_now = resolve_target_products(message, request.last_recommended_ids)
+        if selected_now:
+            return start_checkout(message, request.last_recommended_ids, user, db)
+        # No concrete items -> fall through to the recommendation search below.
 
     # Bargain / negotiate intent?
     is_bargain, offered_amount = detect_bargain_intent(message)

@@ -40,10 +40,12 @@ def generate_plan(
     pref_str = (" Constraints: " + ", ".join(pref_bits) + ".") if pref_bits else ""
 
     prompt = (
-        f"Create a {days}-day meal plan for {servings} people. Goal: {goal}.{pref_str}\n"
+        f"Create a meal plan covering EXACTLY {days} day(s) (no more, no less) for {servings} people. "
+        f"Goal: {goal}.{pref_str}\n"
+        f"The \"days\" array MUST contain exactly {days} item(s). "
         f"For each day include breakfast, lunch and dinner. Keep dishes simple and Indian-friendly.\n"
         f"Respond ONLY with JSON in this exact shape:\n"
-        f'{{"days":[{{"day":"Monday","meals":[{{"type":"Breakfast","dish":"Veg Poha",'
+        f'{{"days":[{{"day":"Day 1","meals":[{{"type":"Breakfast","dish":"Veg Poha",'
         f'"ingredients":["poha","onion","potato","peanuts","turmeric"]}}]}}]}}\n'
         f"Use lowercase single-word or two-word ingredient names. No quantities, no extra text."
     )
@@ -62,6 +64,11 @@ def generate_plan(
     except Exception as e:
         print(f"Meal plan LLM error: {e}")
         plan_days = []
+
+    # Enforce the requested day count server-side: LLMs frequently return a
+    # full week regardless of the prompt, so a 1-day plan would otherwise look
+    # identical to a 7-day plan. Truncate to exactly `days`.
+    plan_days = plan_days[:days]
 
     # Attach a stable id to every meal so the client can toggle/remove them
     for di, day in enumerate(plan_days):

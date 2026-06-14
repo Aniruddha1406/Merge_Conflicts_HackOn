@@ -1,16 +1,22 @@
-version: '3.8'
-
 services:
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "8080:8080"
+    env_file:
+      - ./backend/.env
     environment:
-      - ENVIRONMENT=production
-      # DATABASE_URL will be injected by AWS Elastic Beanstalk
-      # GROQ_API_KEY should also be injected via AWS
+      - ENVIRONMENT=development
+    volumes:
+      # Persist the SQLite database across container restarts
+      - quickcommerce_db:/app/data_volume
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 15s
+      timeout: 8s
+      retries: 5
 
   frontend:
     build:
@@ -19,4 +25,8 @@ services:
     ports:
       - "80:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+
+volumes:
+  quickcommerce_db:
