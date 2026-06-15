@@ -13,7 +13,7 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-RDS-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
 
-**Team Merge_Conflicts · Hack On Amazon Season 6, 2026**
+**Team Merge_Conflicts · HackOn Amazon Season 6, 2026**
 
 *Shopping becomes a conversation. Built for the next generation of commerce.*
 
@@ -52,7 +52,7 @@
 
 **Amazon Now** is a full-stack AI-powered conversational commerce platform where every shopping journey is driven by **Aria** — an intelligent AI shopping companion. Combining **natural language understanding**, **real-time contextual intelligence**, **game-theory price negotiation**, and **collaborative group shopping**, Amazon Now transforms everyday e-commerce into a seamless, intuitive, and deeply personalized experience.
 
-Built by **Team Merge_Conflicts** for the **Hack On Amazon Season 6, 2026**, Amazon Now demonstrates how conversational AI, semantic search, and contextual awareness can redefine how users discover, evaluate, and purchase products.
+Built by **Team Merge_Conflicts** for the **HackOn Amazon Season 6, 2026**, Amazon Now demonstrates how conversational AI, semantic search, and contextual awareness can redefine how users discover, evaluate, and purchase products.
 
 > **💡 Key Insight:** Users spend **60% of their shopping time** scrolling through search results. Amazon Now replaces keyword searches with natural conversations — *"I'm hosting a party tonight, what should I get?"* — and delivers curated, budget-aware, contextually relevant product bundles instantly.
 
@@ -84,7 +84,7 @@ Amazon Now operates on **three integrated pillars**:
 ┌──────────────────────────────────────────────────────────────────┐
 │                         AMAZON NOW                               │
 ├──────────────────┬──────────────────┬────────────────────────────┤
-│  🧠 ARIA AI       │  🤝 SOCIAL       │    🛍️ FULL COMMERCE       │
+│  🧠 ARIA AI      │  🤝 SOCIAL      │    🛍️ FULL COMMERCE       │
 │                  │  COMMERCE        │                            │
 │  Conversational  │  Group carts     │  Complete end-to-end       │
 │  shopping with   │  with voting,    │  shopping: browse,         │
@@ -389,15 +389,15 @@ Mid-Checkout (address/payment) > Cancel > Purchase > Bargain > Emotion/Care Kit 
 ### RAG Anti-Hallucination Pipeline
 
 ```
-┌──────────────┐     ┌────────────────────┐     ┌──────────────────┐
-│  User Query   │────▶│  Intent-to-Category │────▶│  Semantic Search  │
-│               │     │  Mapping (30+ maps) │     │  (ChromaDB /      │
-│               │     │                    │     │   Python Fuzzy)   │
-└──────────────┘     └────────────────────┘     └────────┬─────────┘
-                                                          │
-                    ┌────────────────────┐               │
-                    │  Budget Filtering  │◀──────────────┘
-                    │  (per-item + total) │
+┌──────────────┐     ┌────────────────────┐        ┌──────────────────┐
+│  User Query  │────▶│  Intent-to-Category │────▶│  Semantic Search  │
+│              │     │  Mapping (30+ maps) │      │  (ChromaDB /      │
+│              │     │                    │       │   Python Fuzzy)   │
+└──────────────┘     └────────────────────┘        └────────┬─────────┘
+                                                            │
+                    ┌────────────────────┐                  │
+                    │  Budget Filtering  │ ◀────────────── ┘
+                    │  (per-item + total)│
                     └────────┬───────────┘
                              │
                     ┌────────▼───────────┐     ┌─────────────────┐
@@ -608,8 +608,8 @@ The fastest way to get everything running:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/Aniruddha1406/India_Innovates_Merge_Conflicts.git
-cd India_Innovates_Merge_Conflicts
+git clone https://github.com/Anwesha28S/Merge_Conflicts_HackOn.git
+cd Merge_Conflicts_HackOn
 
 # 2. Configure environment variables
 cp backend/.env.example backend/.env
@@ -628,8 +628,8 @@ docker-compose up --build
 | Service | URL | Description |
 |---------|-----|-------------|
 | **Frontend** | [http://localhost](http://localhost) | Amazon Now web application |
-| **Backend API** | [http://localhost:8080](http://localhost:8080) | FastAPI backend |
-| **API Docs** | [http://localhost:8080/docs](http://localhost:8080/docs) | Interactive Swagger UI |
+| **Backend API** | [http://localhost:8080](http://localhost:8000) | FastAPI backend |
+| **API Docs** | [http://localhost:8080/docs](http://localhost:8000/docs) | Interactive Swagger UI |
 
 ---
 
@@ -1141,8 +1141,8 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 
 **🛒 Amazon Now** · *Shopping becomes a conversation*
 
-Built with ❤️ by [Team Merge_Conflicts](https://github.com/Aniruddha1406/India_Innovates_Merge_Conflicts) for Hack On Amazon Season 6, 2026
+Built with ❤️ by team Merge_Conflicts
 
-*Conversational commerce, powered by AI.*
+*Conversational e-commerce, powered by AI.*
 
 </div>
